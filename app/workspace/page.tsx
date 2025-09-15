@@ -301,14 +301,14 @@ function WorkspaceContent() {
       category: leftCat?.category || '0',
       flagged: newFlaggedState,
       note: leftCat?.note || null,
-      frame_id: currentFrameData.leftFrameId
+      ...(currentFrameData.leftFrameId && { frame_id: currentFrameData.leftFrameId })
     };
 
     const rightData = {
       category: rightCat?.category || '0',
       flagged: newFlaggedState,
       note: rightCat?.note || null,
-      frame_id: currentFrameData.rightFrameId
+      ...(currentFrameData.rightFrameId && { frame_id: currentFrameData.rightFrameId })
     };
 
     setUnsavedChanges(prev => ({

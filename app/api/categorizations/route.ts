@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Format categorizations for the frontend
-    const categorizations: { [key: string]: any } = {};
+    const categorizations: { [key: string]: { frame_id: number; category: string; flagged: boolean; note: string | null } } = {};
 
     if (data) {
       data.forEach(cat => {
@@ -93,7 +93,7 @@ export async function PUT(request: NextRequest) {
         if (!frameIdMatch) continue;
 
         const frameId = parseInt(frameIdMatch[1]);
-        const catData = data as any;
+        const catData = data as { category: string; flagged?: boolean; note?: string | null };
 
         // Upsert categorization
         const { error } = await supabase

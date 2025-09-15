@@ -1,16 +1,7 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-
-interface SegmentData {
-  id: number;
-  order_presented: number;
-  group_id: number;
-  it_groups: {
-    group_number: string;
-  };
-}
 
 interface User {
   id: number;

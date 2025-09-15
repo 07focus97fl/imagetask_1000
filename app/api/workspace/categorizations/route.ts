@@ -66,21 +66,13 @@ export async function GET(request: NextRequest) {
 
     console.log(`Found ${data?.length || 0} categorizations`);
 
-    // Helper function to extract frame number from frame_name
-    function extractFrameNumber(frameName: string): number {
-      const parts = frameName.split('_');
-      if (parts.length >= 3) {
-        return parseInt(parts[2]) || 0;
-      }
-      return 0;
-    }
 
     // Format categorizations for the frontend using frame number and side
     const categorizations: { [key: string]: CategorizationData } = {};
 
     if (data) {
       data.forEach(cat => {
-        const side = cat.it_frames.side === 0 ? 'left' : 'right';
+        const side = cat.it_frames[0].side === 0 ? 'left' : 'right';
         const key = `frame_${cat.frame_id}_${side}`;
 
         categorizations[key] = {

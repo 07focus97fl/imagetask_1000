@@ -2,6 +2,34 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { Storage } from '@google-cloud/storage';
 
+interface FrameData {
+  id: number;
+  frame_name: string;
+  frame_url: string;
+  segment_id: number;
+  side: number;
+  it_segments: {
+    order_presented: number;
+    group_id: number;
+  }[];
+}
+
+interface FrameGroup {
+  frameNumber: number;
+  frame_name: string;
+  frame_url: string;
+  segment_id: number;
+  segment_order: number;
+  left: { id: number; url: string } | null;
+  right: { id: number; url: string } | null;
+}
+
+interface SegmentGroup {
+  segmentId: number;
+  segmentOrder: number;
+  frames: Map<number, FrameGroup>;
+}
+
 const supabase = createClient(
   process.env.DATABASE_URL!,
   process.env.SUPABASE_ANON_KEY!
@@ -78,22 +106,22 @@ export async function GET(request: NextRequest) {
     }
 
     // Group frames by segment and frame number, maintaining segment order
-    const segmentFrameGroups = new Map();
+    const segmentFrameGroups = new Map<number, SegmentGroup>();
 
-    data.forEach(frame => {
+    data.forEach((frame: FrameData) => {
       const segmentId = frame.segment_id;
-      const segmentOrder = frame.it_segments.order_presented;
+      const segmentOrder = frame.it_segments[0].order_presented;
       const frameNum = extractFrameNumber(frame.frame_name);
 
       if (!segmentFrameGroups.has(segmentId)) {
         segmentFrameGroups.set(segmentId, {
           segmentId,
           segmentOrder,
-          frames: new Map()
+          frames: new Map<number, FrameGroup>()
         });
       }
 
-      const segmentGroup = segmentFrameGroups.get(segmentId);
+      const segmentGroup = segmentFrameGroups.get(segmentId)!;
 
       if (!segmentGroup.frames.has(frameNum)) {
         segmentGroup.frames.set(frameNum, {
@@ -107,7 +135,7 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      const frameGroup = segmentGroup.frames.get(frameNum);
+      const frameGroup = segmentGroup.frames.get(frameNum)!;
       if (frame.side === 0) {
         frameGroup.left = { id: frame.id, url: frame.frame_url };
       } else if (frame.side === 1) {
@@ -116,7 +144,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Convert to flat array, ordered by segment order_presented, then by frame number
-    const allFrames = [];
+    const allFrames: FrameGroup[] = [];
     const sortedSegments = Array.from(segmentFrameGroups.values())
       .sort((a, b) => a.segmentOrder - b.segmentOrder);
 
