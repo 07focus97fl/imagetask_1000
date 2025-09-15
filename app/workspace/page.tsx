@@ -169,7 +169,7 @@ function WorkspaceContent() {
     console.log('Found categorizations:', { leftCat, rightCat });
     setLeftCategory(leftCat?.category || '0');
     setRightCategory(rightCat?.category || '0');
-  }, [currentFrame, categorizations, unsavedChanges]);
+  }, [currentFrame, categorizations, unsavedChanges, getCurrentFrameCategorizations]);
 
   // Update the unsaved changes tracking
   useEffect(() => {
