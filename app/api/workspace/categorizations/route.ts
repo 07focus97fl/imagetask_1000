@@ -180,6 +180,70 @@ export async function PUT(request: NextRequest) {
       }
     }
 
+    // After saving explicit changes, ensure all frames in the group have categorizations
+    // This creates default '0' categorizations for any uncategorized frames
+    try {
+      console.log(`Ensuring all frames in group ${groupId} have categorizations for user ${userId}`);
+
+      // Get all frames in this group
+      const { data: allFrames, error: framesError } = await supabase
+        .from('it_frames')
+        .select(`
+          id,
+          it_segments!inner (
+            group_id
+          )
+        `)
+        .eq('it_segments.group_id', groupId);
+
+      if (framesError) {
+        console.error('Error fetching frames for default categorizations:', framesError);
+      } else if (allFrames && allFrames.length > 0) {
+        // Get existing categorizations for this user and group
+        const { data: existingCats, error: catsError } = await supabase
+          .from('it_categorizations')
+          .select('frame_id')
+          .eq('user_id', userId)
+          .in('frame_id', allFrames.map(f => f.id));
+
+        if (catsError) {
+          console.error('Error fetching existing categorizations:', catsError);
+        } else {
+          const existingFrameIds = new Set(existingCats?.map(c => c.frame_id) || []);
+          const missingFrames = allFrames.filter(frame => !existingFrameIds.has(frame.id));
+
+          if (missingFrames.length > 0) {
+            console.log(`Creating default '0' categorizations for ${missingFrames.length} uncategorized frames`);
+
+            const defaultCategorizations = missingFrames.map(frame => ({
+              frame_id: frame.id,
+              user_id: userId,
+              category: '0',
+              note: null,
+              flagged: false
+            }));
+
+            const { error: defaultError, count: defaultCount } = await supabase
+              .from('it_categorizations')
+              .insert(defaultCategorizations);
+
+            if (defaultError) {
+              console.error('Error creating default categorizations:', defaultError);
+            } else {
+              const defaultSaved = defaultCount || defaultCategorizations.length;
+              saved += defaultSaved;
+              console.log(`Successfully created ${defaultSaved} default categorizations`);
+            }
+          } else {
+            console.log('All frames in group already have categorizations');
+          }
+        }
+      }
+    } catch (defaultError) {
+      console.error('Error in default categorization process:', defaultError);
+      // Don't fail the main save operation if default categorization fails
+    }
+
     return NextResponse.json({
       success: saved > 0,
       saved,
