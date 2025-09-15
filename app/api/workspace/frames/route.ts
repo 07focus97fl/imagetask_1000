@@ -2,18 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { Storage } from '@google-cloud/storage';
 
-interface FrameData {
-  id: number;
-  frame_name: string;
-  frame_url: string;
-  segment_id: number;
-  side: number;
-  it_segments: {
-    order_presented: number;
-    group_id: number;
-  }[];
-}
-
 interface FrameGroup {
   frameNumber: number;
   frame_name: string;
@@ -70,21 +58,38 @@ export async function GET(request: NextRequest) {
 
     console.log(`Fetching frames for group: ${group}`);
 
-    // Get all frames for all segments in this group
+    // First get all segments for this group
+    const { data: segments, error: segmentError } = await supabase
+      .from('it_segments')
+      .select('id, order_presented')
+      .eq('group_id', parseInt(group));
+
+    if (segmentError) {
+      console.error('Error fetching segments:', segmentError);
+      return NextResponse.json(
+        { error: 'Failed to fetch segments' },
+        { status: 500 }
+      );
+    }
+
+    if (!segments || segments.length === 0) {
+      console.log(`No segments found for group ${group}`);
+      return NextResponse.json({
+        success: true,
+        frames: [],
+        totalFrames: 0,
+        group: { group }
+      });
+    }
+
+    const segmentIds = segments.map(s => s.id);
+    console.log(`Found ${segments.length} segments for group ${group}:`, segmentIds);
+
+    // Then get all frames for those segments
     const { data, error } = await supabase
       .from('it_frames')
-      .select(`
-        id,
-        frame_name,
-        frame_url,
-        segment_id,
-        side,
-        it_segments!inner (
-          order_presented,
-          group_id
-        )
-      `)
-      .eq('it_segments.group_id', group);
+      .select('id, frame_name, frame_url, segment_id, side')
+      .in('segment_id', segmentIds);
 
     if (error) {
       console.error('Database error:', error);
@@ -105,12 +110,25 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // Create a map of segment ID to segment data for easy lookup
+    const segmentMap = new Map();
+    segments.forEach(segment => {
+      segmentMap.set(segment.id, segment);
+    });
+
     // Group frames by segment and frame number, maintaining segment order
     const segmentFrameGroups = new Map<number, SegmentGroup>();
 
-    data.forEach((frame: FrameData) => {
+    data.forEach((frame) => {
       const segmentId = frame.segment_id;
-      const segmentOrder = frame.it_segments[0].order_presented;
+      const segmentData = segmentMap.get(segmentId);
+
+      if (!segmentData) {
+        console.warn(`No segment data found for frame ${frame.frame_name}`);
+        return;
+      }
+
+      const segmentOrder = segmentData.order_presented;
       const frameNum = extractFrameNumber(frame.frame_name);
 
       if (!segmentFrameGroups.has(segmentId)) {

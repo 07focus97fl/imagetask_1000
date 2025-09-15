@@ -35,26 +35,42 @@ export async function GET(request: NextRequest) {
     console.log(`Loading categorizations for group ${groupId}`);
 
     // Get all categorizations for frames in all segments of this group
-    const { data, error } = await supabase
-      .from('it_categorizations')
+    // First get all frame IDs for this group
+    const { data: frameIds, error: frameError } = await supabase
+      .from('it_frames')
       .select(`
         id,
-        frame_id,
-        user_id,
-        category,
-        note,
-        flagged,
-        it_frames!inner (
-          frame_name,
-          segment_id,
-          side,
-          it_segments!inner (
-            group_id,
-            order_presented
-          )
+        side,
+        it_segments!inner (
+          group_id
         )
       `)
-      .eq('it_frames.it_segments.group_id', groupId);
+      .eq('it_segments.group_id', parseInt(groupId));
+
+    if (frameError) {
+      console.error('Error fetching frame IDs for group:', frameError);
+      return NextResponse.json(
+        { error: 'Failed to fetch frame IDs' },
+        { status: 500 }
+      );
+    }
+
+    if (!frameIds || frameIds.length === 0) {
+      console.log(`No frames found for group ${groupId}`);
+      return NextResponse.json({
+        success: true,
+        categorizations: {}
+      });
+    }
+
+    console.log(`Found ${frameIds.length} frames for group ${groupId}`);
+
+    // Now get categorizations for those frames
+    const frameIdList = frameIds.map(f => f.id);
+    const { data, error } = await supabase
+      .from('it_categorizations')
+      .select('id, frame_id, user_id, category, note, flagged')
+      .in('frame_id', frameIdList);
 
     if (error) {
       console.error('Database error:', error);
@@ -67,12 +83,23 @@ export async function GET(request: NextRequest) {
     console.log(`Found ${data?.length || 0} categorizations`);
 
 
-    // Format categorizations for the frontend using frame number and side
+    // Create a map of frame ID to side for easy lookup
+    const frameIdToSide = new Map();
+    frameIds.forEach(frame => {
+      frameIdToSide.set(frame.id, frame.side === 0 ? 'left' : 'right');
+    });
+
+    // Format categorizations for the frontend using frame ID and side
     const categorizations: { [key: string]: CategorizationData } = {};
 
     if (data) {
       data.forEach(cat => {
-        const side = cat.it_frames[0].side === 0 ? 'left' : 'right';
+        const side = frameIdToSide.get(cat.frame_id);
+        if (!side) {
+          console.warn(`No side data found for frame ${cat.frame_id}`);
+          return;
+        }
+
         const key = `frame_${cat.frame_id}_${side}`;
 
         categorizations[key] = {
@@ -186,7 +213,7 @@ export async function PUT(request: NextRequest) {
             group_id
           )
         `)
-        .eq('it_segments.group_id', groupId);
+        .eq('it_segments.group_id', parseInt(groupId));
 
       if (framesError) {
         console.error('Error fetching frames for default categorizations:', framesError);
