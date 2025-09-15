@@ -11,6 +11,8 @@ interface User {
 interface GroupData {
   id: number;
   group_number: string;
+  completed: boolean;
+  completed_at: string | null;
 }
 
 export default function GroupSelectPage() {
@@ -76,6 +78,35 @@ export default function GroupSelectPage() {
     router.push(`/workspace?group=${groupId}`);
   };
 
+  // Toggle completion status
+  const toggleCompletion = async (groupId: number, completed: boolean, event: React.ChangeEvent<HTMLInputElement>) => {
+    event.stopPropagation(); // Prevent navigation when clicking checkbox
+
+    try {
+      const response = await fetch('/api/groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          groupId: groupId,
+          completed: !completed
+        })
+      });
+
+      if (response.ok) {
+        // Update the local state
+        setGroups(prev => prev.map(group =>
+          group.id === groupId
+            ? { ...group, completed: !completed, completed_at: !completed ? new Date().toISOString() : null }
+            : group
+        ));
+      } else {
+        console.error('Failed to update completion status');
+      }
+    } catch (error) {
+      console.error('Error updating completion status:', error);
+    }
+  };
+
   // Handle manual download
   const handleDownloadManual = () => {
     const link = document.createElement('a');
@@ -99,13 +130,12 @@ export default function GroupSelectPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col p-6">
+    <div className="min-h-screen bg-gray-50 flex flex-col p-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Select Image Group</h1>
           {currentUser && (
-            <p className="text-sm text-gray-600 mt-1">
+            <p className="text-sm text-gray-600">
               Welcome, <span className="font-medium text-blue-600">{currentUser.display_name}</span>
             </p>
           )}
@@ -134,35 +164,53 @@ export default function GroupSelectPage() {
         </div>
       </div>
 
-      {/* Instructions */}
-      <div className="bg-blue-50 rounded-lg p-4 mb-8">
-        <h2 className="text-lg font-semibold text-gray-900 mb-2">Instructions</h2>
-        <p className="text-gray-700">
-          Click on any group below to start categorizing all images from that group.
-          All segments within the group will be presented in order.
-        </p>
-      </div>
 
       {/* Groups Grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 flex-1">
         {groups.map((group) => (
-          <button
+          <div
             key={group.id}
-            onClick={() => navigateToWorkspace(group.id.toString())}
-            className="bg-white rounded-lg shadow-lg p-6 hover:shadow-xl transition-shadow border-2 border-transparent hover:border-blue-500 focus:border-blue-500 focus:outline-none"
+            className={`bg-white rounded-lg shadow-lg p-6 border-2 transition-all relative ${
+              group.completed
+                ? 'border-green-500 bg-green-50'
+                : 'border-transparent hover:shadow-xl hover:border-blue-500'
+            }`}
           >
-            <div className="text-center">
-              <div className="text-4xl font-bold text-blue-600 mb-2">
+            {/* Completion Checkbox */}
+            <div className="absolute top-2 right-2">
+              <input
+                type="checkbox"
+                checked={group.completed}
+                onChange={(e) => toggleCompletion(group.id, group.completed, e)}
+                className="w-5 h-5 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500 cursor-pointer"
+                title={group.completed ? 'Mark as incomplete' : 'Mark as complete'}
+              />
+            </div>
+
+            <button
+              onClick={() => navigateToWorkspace(group.id.toString())}
+              className="text-center w-full h-full flex flex-col justify-center focus:outline-none"
+            >
+              <div className={`text-4xl font-bold mb-2 ${
+                group.completed ? 'text-green-600' : 'text-blue-600'
+              }`}>
                 {group.group_number}
               </div>
-              <div className="text-lg font-medium text-gray-900 mb-1">
+              <div className="text-lg font-medium text-gray-900">
                 Group {group.group_number}
               </div>
-              <div className="text-sm text-gray-500">
-                Click to start categorizing
-              </div>
-            </div>
-          </button>
+              {group.completed && (
+                <div className="text-sm text-green-600 font-medium mt-2">
+                  ✓ Completed
+                </div>
+              )}
+              {group.completed && group.completed_at && (
+                <div className="text-xs text-gray-400 mt-1">
+                  {new Date(group.completed_at).toLocaleDateString()}
+                </div>
+              )}
+            </button>
+          </div>
         ))}
       </div>
 
