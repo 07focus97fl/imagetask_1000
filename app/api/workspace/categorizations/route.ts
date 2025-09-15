@@ -19,6 +19,15 @@ interface CategorizationChange {
   note?: string | null;
 }
 
+interface CategorizationRecord {
+  id: number;
+  frame_id: number;
+  user_id: number;
+  category: string;
+  note: string | null;
+  flagged: boolean;
+}
+
 // GET - Load existing categorizations for a segment
 export async function GET(request: NextRequest) {
   try {
@@ -65,12 +74,37 @@ export async function GET(request: NextRequest) {
 
     console.log(`Found ${frameIds.length} frames for group ${groupId}`);
 
-    // Now get categorizations for those frames
+    // Get current user from session
+    const userSession = request.cookies.get('user_session');
+    let currentUserId = null;
+
+    if (userSession) {
+      try {
+        const user = JSON.parse(userSession.value);
+        currentUserId = user.id;
+      } catch {
+        console.warn('Failed to parse user session');
+      }
+    }
+
+    // Now get categorizations for those frames FOR THE CURRENT USER ONLY
     const frameIdList = frameIds.map(f => f.id);
-    const { data, error } = await supabase
-      .from('it_categorizations')
-      .select('id, frame_id, user_id, category, note, flagged')
-      .in('frame_id', frameIdList);
+    let data: CategorizationRecord[] | null = null;
+    let error = null;
+
+    if (currentUserId) {
+      const result = await supabase
+        .from('it_categorizations')
+        .select('id, frame_id, user_id, category, note, flagged')
+        .in('frame_id', frameIdList)
+        .eq('user_id', currentUserId);
+
+      data = result.data as CategorizationRecord[];
+      error = result.error;
+    } else {
+      // No user session, return empty categorizations
+      data = [];
+    }
 
     if (error) {
       console.error('Database error:', error);
